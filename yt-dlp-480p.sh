@@ -5,6 +5,7 @@ show_help() {
     echo "Usage: $0 -o OUTPUT_DIR [OPTIONS]"
     echo "Options:"
     echo "  -o, --output    Specify the download directory"
+    echo "  -i, --ignore    Ignore already downloaded files"
     echo "  -h, --help      Show this help message"
 }
 
@@ -14,28 +15,20 @@ SCRIPT_PATH=$(dirname "$0")
 
 # Default output directory
 OUTDIR="$HOME/Downloads/"
+IGNORE_EXISTING=false
 
 # Parse parameters
 while [[ "$#" -gt 0 ]]; do
     case $1 in
         -o|--output) OUTDIR="$2"; shift ;;
+        -i|--ignore) IGNORE_EXISTING=true ;;
         -h|--help) show_help; exit 0 ;;
         *) items+=("$1") ;;  # Collect other parameters
     esac
     shift
 done
 
-if [ ! -f " $SCRIPT_PATH/yt-dlp-url_succeed.log" ]; then
-    touch "$SCRIPT_PATH/yt-dlp-url_succeed.log"
-fi
-
 echo "${DATE}" >> $SCRIPT_PATH/yt-dlp-url_list.log
-
-for item in "${items[@]}"; do
-   cat "$SCRIPT_PATH/yt-dlp-url_succeed.log" | grep ${item} | grep 480p  && continue
-   echo "Try to download as 480p: ${item} with yt-dlp" >> $SCRIPT_PATH/yt-dlp-url_list.log
-   echo "Try to download as 480p: ${item} with yt-dlp"
-done
 
 # Validate output directory
 if [[ -z "$OUTDIR" || ! -d "$OUTDIR" ]]; then
@@ -43,15 +36,35 @@ if [[ -z "$OUTDIR" || ! -d "$OUTDIR" ]]; then
     exit 1
 fi
 
-
 # Loop through other parameters and execute command
 for item in "${items[@]}"; do
-cat "$SCRIPT_PATH/yt-dlp-url_succeed.log" | grep ${item} | grep 480p  && continue
+    # Check if we should ignore already downloaded files
+    if ! $IGNORE_EXISTING; then
+        # Check if both item and "480p" exist in the log
+        if grep -q "${item}" "$SCRIPT_PATH/yt-dlp-url_succeed.log" && grep -q "480p" "$SCRIPT_PATH/yt-dlp-url_succeed.log"; then
+            echo "File already downloaded: ${item} 480p, skipping..."
+            continue
+        fi
+    fi
 
-if command -v yt-dlp >/dev/null 2>&1; then
-        yt-dlp --ignore-errors -f "bestvideo[height<=420]+bestaudio/best[height<=480]" --add-metadata --embed-thumbnail --force-overwrite --merge-output-format mp4 \
+    echo "Try to download as 480p: ${item} with yt-dlp" >> $SCRIPT_PATH/yt-dlp-url_list.log
+    echo "Try to download as 480p: ${item} with yt-dlp"
+
+    if command -v yt-dlp >/dev/null 2>&1; then
+        yt-dlp -f "bestvideo[height<=480]+bestaudio/best[height<=480]" --add-metadata --embed-thumbnail --force-overwrite --merge-output-format mp4 \
         --output "%(title)s.%(ext)s" --paths "$OUTDIR" "$item"
 
+        if [ $? -ne 0 ]; then
+           echo "Error Code: $? - Downloading as 480p: $item yt-dlp"
+           echo "Error Code: $? - Downloading as 480p: $item yt-dlp" >> $SCRIPT_PATH/yt-dlp-error.log
+        else
+           echo "Download Succeed as 480p: $item yt-dlp" >> $SCRIPT_PATH/yt-dlp-url_succeed.log
+        fi
+
+    else
+        cd "$SCRIPT_PATH"
+        python -m yt-dlp -f "bestvideo[height<=480]+bestaudio/best[height<=480]" --add-metadata --embed-thumbnail --force-overwrite --merge-output-format mp4 \
+        --output "%(title)s.%(ext)s" --paths "$OUTDIR" "$item"
 
         if [ $? -ne 0 ]; then
            echo "Error Code: $? - Downloading as 480p: $item yt-dlp"
@@ -60,23 +73,5 @@ if command -v yt-dlp >/dev/null 2>&1; then
            echo "Download Succeed as 480p: $item yt-dlp" >> $SCRIPT_PATH/yt-dlp-url_succeed.log
         fi
 
-else
-  if pipx run yt-dlp --version >/dev/null 2>&1; then
-    pip="pipx run yt-dlp"
-  else
-    pip="python -m yt-dlp"
-  fi
-        cd $SCRIPT_PATH
-        sh -c '${pip} --ignore-errors -f "bestvideo[height<=420]+bestaudio/best[height<=480]" --add-metadata --embed-thumbnail --force-overwrite --merge-output-format mp4 \
-        --output "%(title)s.%(ext)s" --paths "$OUTDIR" "$item"'
-
-
-        if [ $? -ne 0 ]; then
-           echo "Error Code: $? - Downloading as 480p: $item yt-dlp"
-           echo "Error Code: $? - Downloading as 480p: $item yt-dlp" >> $SCRIPT_PATH/yt-dlp-error.log
-        else
-           echo "Download Succeed as 480p: $item yt-dlp" >> $SCRIPT_PATH/yt-dlp-url_succeed.log
-        fi
-
-fi
+    fi
 done

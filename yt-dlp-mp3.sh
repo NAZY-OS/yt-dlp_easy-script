@@ -39,9 +39,12 @@ fi
 # Loop through other parameters and execute command
 for item in "${items[@]}"; do
     # Check if we should ignore already downloaded files
-    if $IGNORE_EXISTING && grep -q "${item}.mp3" "$SCRIPT_PATH/yt-dlp-url_succeed.log"; then
-        echo "File already downloaded: ${item}.mp3, skipping..."
-        continue
+    if ! $IGNORE_EXISTING; then
+        # Check if both item and "mp3" exist in the log
+        if grep -q "${item}" "$SCRIPT_PATH/yt-dlp-url_succeed.log" && grep -q "mp3" "$SCRIPT_PATH/yt-dlp-url_succeed.log"; then
+            echo "File already downloaded: ${item} mp3, skipping..."
+            continue
+        fi
     fi
 
     echo "Try to download as mp3: ${item} with yt-dlp" >> $SCRIPT_PATH/yt-dlp-url_list.log
